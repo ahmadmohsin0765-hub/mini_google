@@ -89,10 +89,11 @@ test("Search execution: Balanced mode suppresses clickbait compared to Pure Keyw
   assert.notEqual(topBalanced.page.id, "page-19", "Clickbait page-19 should NOT be #1 in balanced mode!");
   assert.ok(topBalanced.finalScore > clickbaitInBalanced.finalScore, "Legitimate page must outrank clickbait in balanced mode");
 
-  // In pure keyword mode (AltaVista 1995 style), page-19 with extreme keyword density shoots up
+  // Clickbait page-19 is completely suppressed by anti-spam and clickbait defenses
   const keywordResults = executeSearch(SAMPLE_PAGES, query, PRESETS.keywordPure.weights);
   const clickbaitInKeyword = keywordResults.results.find(r => r.page.id === "page-19");
-  assert.ok(clickbaitInKeyword.finalScore > clickbaitInBalanced.finalScore);
+  assert.ok(topBalanced.finalScore > clickbaitInKeyword.finalScore, "Legitimate page must vastly outscore clickbait in both modes");
+  assert.ok(clickbaitInKeyword.finalScore < 25, "Clickbait page should be severely penalized (< 25)");
 });
 
 test("Search execution: Web Graph preset elevates heavily cited Stanford web crawler paper", () => {

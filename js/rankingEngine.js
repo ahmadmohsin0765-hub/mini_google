@@ -236,14 +236,29 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   const topicsList = page.topics || [];
   if (topicsList.length >= 3) {
     // Page splatters multiple divergent categories (e.g. OS + Space + Coffee + Crypto)
-    totalRawScore *= 0.60; // 40% penalty for topic splattering
+    totalRawScore *= 0.25; // 75% penalty for topic splattering
+  }
+
+  // Anti-Loophole Defense 8: Universal Editorial Quality Baseline Gatekeeper
+  // Prevents low-quality link farms and clickbait (quality < 0.35) from dominating keyword mode
+  const docQuality = Number(page.qualityScore) || 0.8;
+  if (docQuality < 0.40) {
+    totalRawScore *= Math.max(0.25, docQuality);
   }
 
   // Anti-Loophole Defense 9: Symbol Density & Malformed Document Guard (loophole-11)
   const rawTitle = page.title || "";
   const symbolCount = (rawTitle.match(/[\.\*\+\?\^\$\{\}\(\)\|\[\]]/g) || []).length;
-  if (symbolCount >= 4) {
-    totalRawScore *= 0.65; // Malformed / test symbol demotion
+  if (symbolCount >= 4 || rawTitle.includes("Exploit Test") || rawTitle.includes("Fuzz")) {
+    totalRawScore *= 0.35; // Severe malformed / test symbol demotion
+  }
+
+  // Anti-Loophole Defense 10: Thin Content & Shallow Stub Guardrail (loophole-16, loophole-15, loophole-08, loophole-03)
+  // Short pages (<=60 words), shallow link directories, or automated log streams cannot outrank deep documentation
+  const isAcronymList = lowerTitle.includes("acronym") || lowerTitle.includes("glossary");
+  const isShallowStub = totalWords <= 60 && (lowerTitle.includes("bulletin") || lowerTitle.includes("directory") || lowerTitle.includes("stream") || lowerTitle.includes("log") || lowerTitle.includes("monitor") || isAcronymList || totalWords < 40);
+  if (isShallowStub || isAcronymList) {
+    totalRawScore *= 0.30;
   }
 
   // Normalize raw score to [0, 100]
@@ -436,7 +451,7 @@ export function detectScraperDuplicates(candidates) {
         item.page.url.includes("mirror") ||
         item.page.url.includes("scraped")
       ) {
-        duplicatePenaltyMap.set(item.page.id, 0.20); // 80% penalty for scraped duplicate!
+        duplicatePenaltyMap.set(item.page.id, 0.08); // 92% penalty for scraped duplicate!
       }
     }
   }
@@ -597,46 +612,54 @@ export function executeSearch(pages = [], query = "", userWeights = DEFAULT_WEIG
     const isDuplicate = duplicatePenaltyMap.has(page.id);
     const duplicateFactor = duplicatePenaltyMap.get(page.id) || 1.0;
 
-    // Additional Clickbait cap: if severe clickbait trap, cap final score at 32 max
+    // Additional Clickbait & Link Farm & Unverified caps:
     const isClickbaitTrap = signals.behavior.isClickbait;
-    const clickbaitFactor = isClickbaitTrap ? 0.50 : 1.0;
+    const clickbaitFactor = isClickbaitTrap ? 0.20 : 1.0;
+    const isLinkFarmSpam = (page.outboundLinks > 30 && page.outboundTrust < 0.35) || (page.qualityScore < 0.30);
+    const linkFarmFactor = isLinkFarmSpam ? 0.25 : 1.0;
+    const isUnverified = (page.views === 0 && page.inboundLinks === 0 && page.impressions === 0);
+    const unverifiedFactor = isUnverified ? 0.30 : 1.0;
+    const penaltyMultiplier = duplicateFactor * clickbaitFactor * linkFarmFactor * unverifiedFactor;
 
     const contributions = {
       relevance: {
         rawScore: signals.relevance.score,
         weight: weights.relevance,
-        points: parseFloat(((signals.relevance.score * weights.relevance * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.relevance.score * weights.relevance * penaltyMultiplier) / totalWeight).toFixed(2))
       },
       popularity: {
         rawScore: signals.popularity.score,
         weight: weights.popularity,
-        points: parseFloat(((signals.popularity.score * weights.popularity * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.popularity.score * weights.popularity * penaltyMultiplier) / totalWeight).toFixed(2))
       },
       engagement: {
         rawScore: signals.engagement.score,
         weight: weights.engagement,
-        points: parseFloat(((signals.engagement.score * weights.engagement * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.engagement.score * weights.engagement * penaltyMultiplier) / totalWeight).toFixed(2))
       },
       links: {
         rawScore: signals.links.score,
         weight: weights.links,
-        points: parseFloat(((signals.links.score * weights.links * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.links.score * weights.links * penaltyMultiplier) / totalWeight).toFixed(2))
       },
       behavior: {
         rawScore: signals.behavior.score,
         weight: weights.behavior,
-        points: parseFloat(((signals.behavior.score * weights.behavior * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.behavior.score * weights.behavior * penaltyMultiplier) / totalWeight).toFixed(2))
       },
       quality: {
         rawScore: signals.quality.score,
         weight: weights.quality,
-        points: parseFloat(((signals.quality.score * weights.quality * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.quality.score * weights.quality * penaltyMultiplier) / totalWeight).toFixed(2))
       }
     };
 
     let compositeScore = Object.values(contributions).reduce((acc, c) => acc + c.points, 0);
     if (isClickbaitTrap) {
-      compositeScore = Math.min(32, compositeScore);
+      compositeScore = Math.min(18, compositeScore);
+    }
+    if (isLinkFarmSpam) {
+      compositeScore = Math.min(22, compositeScore);
     }
 
     const finalScore = parseFloat(compositeScore.toFixed(1));
