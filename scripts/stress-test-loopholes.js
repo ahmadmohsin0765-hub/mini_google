@@ -84,3 +84,4 @@ if (loopholesFound.length > 0) {
 } else {
   console.log("✔ ZERO LOOPHOLES FOUND: All adversarial pages successfully quarantined across all queries & presets.");
 }
+
