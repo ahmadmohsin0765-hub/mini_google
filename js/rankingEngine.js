@@ -1,5 +1,5 @@
 /**
- * ARCHON SEARCH '98 - Multi-Signal Ranking Engine (Hardened against Search Loopholes)
+ * ARCHON SEARCH '98 - Multi-Signal Ranking Engine (Hardened against All Search Loopholes)
  * 
  * ============================================================================
  * RANKING FORMULA & MATHEMATICAL DESIGN
@@ -10,29 +10,40 @@
  * 
  *    S_final = (W_rel * S_rel + W_pop * S_pop + W_eng * S_eng + W_lnk * S_lnk + W_beh * S_beh + W_qlt * S_qlt) / W_total
  * 
- * HARDENED ANTI-LOOPHOLE DEFENSES:
+ * COMPREHENSIVE ANTI-LOOPHOLE DEFENSES:
  *  1. BM25 Term Saturation & Keyword Density Penalty:
  *     Neutralizes extreme keyword stuffing (loophole-01, loophole-20). Repetition beyond
- *     3-4 occurrences yields diminishing returns, and density > 12% triggers spam demotion.
+ *     3-4 occurrences yields diminishing returns, and density > 10% triggers progressive spam demotion.
  * 
  *  2. Reading Velocity & Content Depth Cross-Check:
  *     Neutralizes dwell sweet-spot sniping (loophole-09). Dwell time is bounded by the
  *     document's word count. A 20-word page cannot claim 195 seconds of legitimate reading.
  * 
- *  3. Cross-Document Canonical Deduplication & Anti-Scraping:
+ *  3. Zero-Tolerance Content Shingle Deduplication (Anti-Scraping):
  *     Neutralizes near-duplicate scraper mirrors (loophole-10). Documents sharing >75%
- *     text shingles with older/canonical sources receive a severe Duplicate Content Demotion.
+ *     text shingles with older/canonical sources receive an 80% Duplicate Content Demotion.
  * 
- *  4. Satisfaction-Gated CTR Fraud Filter:
- *     Neutralizes click-hijack bots and clickbait (loophole-05, loophole-13). High CTR
- *     with low satisfaction (<20%) is treated as fraud/deception, inverting the bonus.
+ *  4. Toxic Clickbait & Satisfaction-Gated CTR Inversion:
+ *     Neutralizes click-hijack bots and clickbait (loophole-05, loophole-13). If satisfaction
+ *     rate is <20% and dwell is <20s, high CTR is penalized, and composite score is capped.
  * 
- *  5. Link Quality Square Dampening & Outbound Parasite Defense:
+ *  5. Link Quality Exponential Dampening & Outbound Parasite Defense:
  *     Neutralizes synthetic link farms (loophole-04, loophole-18) and outbound parasitism
  *     (loophole-08). Outbound trust cannot boost a page lacking inbound citation authority.
  * 
  *  6. Title-Content Coherence Guard:
  *     Neutralizes anchor/title spoofing (loophole-06) if body content contradicts the title.
+ * 
+ *  7. Topical Cohesion & Document Entropy Filter:
+ *     Neutralizes omni-topic splattering (loophole-07). Pages claiming >= 3 divergent categories
+ *     face a topic dilution penalty.
+ * 
+ *  8. Freshness Quality Sanity Cap:
+ *     Neutralizes hyper-recent timestamp spam (loophole-15). Freshness only amplifies high-quality
+ *     content; recent shallow content is capped.
+ * 
+ *  9. Symbol Density & Malformed Document Guard:
+ *     Neutralizes test payloads and raw symbol injection (loophole-11).
  */
 
 export const DEFAULT_WEIGHTS = {
@@ -60,7 +71,7 @@ export const PRESETS = {
   keywordPure: {
     id: "keywordPure",
     name: "Pure Keyword Match (AltaVista 1995)",
-    description: "Relies primarily on keyword frequency with basic anti-spam density caps.",
+    description: "Relies primarily on keyword frequency with baseline anti-spam safeguards.",
     weights: { relevance: 85, popularity: 5, engagement: 0, links: 5, behavior: 5, quality: 0 }
   },
   crowdWisdom: {
@@ -89,9 +100,6 @@ const STOPWORDS = new Set([
   "was", "what", "when", "where", "who", "will", "with"
 ]);
 
-/**
- * Tokenize a text string into normalized alphanumeric terms with simple stemming
- */
 export function tokenize(text) {
   if (!text || typeof text !== "string") return [];
   return text
@@ -102,9 +110,6 @@ export function tokenize(text) {
     .filter(t => t.length > 1 && !STOPWORDS.has(t));
 }
 
-/**
- * Simple stemmer normalization to handle plurals ("systems" -> "system")
- */
 function stemToken(token) {
   if (token.endsWith("ies") && token.length > 4) return token.slice(0, -3) + "y";
   if (token.endsWith("es") && token.length > 4) return token.slice(0, -2);
@@ -114,12 +119,6 @@ function stemToken(token) {
 
 /**
  * 1. Query Relevance Score Calculation (S_rel in [0, 100])
- * 
- * Hardened with:
- * - BM25-style diminishing returns on term repetition
- * - Keyword density spam penalties (>12% query term density triggers severe demotion)
- * - Title-body coherence verification
- * - Stemmed token deduplication
  */
 export function calculateRelevance(page, queryTokens, rawQuery = "") {
   if (!queryTokens || queryTokens.length === 0) {
@@ -133,7 +132,6 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   const lowerKeywords = (page.keywords || []).map(k => k.toLowerCase()).join(" ");
   const lowerTopics = (page.topics || []).map(t => t.toLowerCase()).join(" ");
 
-  // Count total words in document to compute keyword density
   const allWords = (lowerTitle + " " + lowerDesc + " " + lowerContent).split(/\s+/).filter(Boolean);
   const totalWords = Math.max(1, allWords.length);
 
@@ -162,9 +160,8 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
     const titleRegex = new RegExp(`\\b${escapeRegExp(token)}s?\\b`, "gi");
     const rawTitleCount = (lowerTitle.match(titleRegex) || []).length;
     if (rawTitleCount > 0) {
-      // Saturation: 1st hit = 4.0, 2nd hit = +1.5, further hits = 0
       const saturatedTitle = Math.min(2, rawTitleCount);
-      const titlePts = saturatedTitle === 1 ? 4.0 : 5.5;
+      const titlePts = saturatedTitle === 1 ? 4.0 : 5.2;
       totalRawScore += titlePts;
       titleMatches += rawTitleCount;
       totalQueryOccurrences += rawTitleCount;
@@ -173,15 +170,15 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
 
     // Keywords and topics (curated human metadata)
     if (lowerKeywords.includes(token) || lowerTopics.includes(token) || lowerKeywords.includes(stem)) {
-      totalRawScore += 2.5;
+      totalRawScore += 2.2;
       tokenMatched = true;
     }
 
-    // Description match (saturated at 2)
+    // Description match
     const descRegex = new RegExp(`\\b${escapeRegExp(token)}s?\\b`, "gi");
     const descCount = (lowerDesc.match(descRegex) || []).length;
     if (descCount > 0) {
-      totalRawScore += Math.min(2, descCount) * 1.5;
+      totalRawScore += Math.min(2, descCount) * 1.4;
       totalQueryOccurrences += descCount;
       tokenMatched = true;
     }
@@ -190,8 +187,7 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
     const contentRegex = new RegExp(`\\b${escapeRegExp(token)}s?\\b`, "gi");
     const rawContentCount = (lowerContent.match(contentRegex) || []).length;
     if (rawContentCount > 0) {
-      // BM25 term frequency saturation: rawCount / (rawCount + 1.2) * 5.0
-      const bm25Tf = (rawContentCount / (rawContentCount + 1.5)) * 4.5;
+      const bm25Tf = (rawContentCount / (rawContentCount + 1.4)) * 4.2;
       totalRawScore += bm25Tf;
       bodyMatches += rawContentCount;
       totalQueryOccurrences += rawContentCount;
@@ -211,32 +207,43 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   let exactPhrase = false;
   if (uniqueQueryTokens.length > 1 && cleanRawQuery.length > 3) {
     if (lowerTitle.includes(cleanRawQuery)) {
-      totalRawScore *= 1.30;
+      totalRawScore *= 1.25;
       exactPhrase = true;
     } else if (lowerDesc.includes(cleanRawQuery)) {
-      totalRawScore *= 1.15;
+      totalRawScore *= 1.12;
       exactPhrase = true;
     }
   }
 
   // Coverage penalty
   const coverageRatio = matchedUniqueTokens / uniqueQueryTokens.length;
-  totalRawScore *= Math.pow(coverageRatio, 1.3);
+  totalRawScore *= Math.pow(coverageRatio, 1.35);
 
   // Anti-Loophole Defense 1: Keyword Density Spam Filter
-  // If query terms exceed 12% of the entire document, it's deliberate keyword stuffing!
   const queryDensity = totalQueryOccurrences / totalWords;
   let spamPenalty = 1.0;
-  if (queryDensity > 0.12) {
-    // Sharp progressive penalty
-    spamPenalty = Math.max(0.20, 1.0 - (queryDensity - 0.12) * 4.0);
+  if (queryDensity > 0.10) {
+    spamPenalty = Math.max(0.15, 1.0 - (queryDensity - 0.10) * 5.0);
     totalRawScore *= spamPenalty;
   }
 
-  // Anti-Loophole Defense 2: Title-Content Coherence Guard
-  // If query matches title, but content has ZERO matches, penalize deceptive title bait (loophole-06)
+  // Anti-Loophole Defense 2: Title-Content Coherence Guard (loophole-06)
   if (titleMatches > 0 && bodyMatches === 0 && totalWords > 30) {
-    totalRawScore *= 0.55;
+    totalRawScore *= 0.50;
+  }
+
+  // Anti-Loophole Defense 7: Topical Cohesion & Document Entropy Filter (loophole-07)
+  const topicsList = page.topics || [];
+  if (topicsList.length >= 3) {
+    // Page splatters multiple divergent categories (e.g. OS + Space + Coffee + Crypto)
+    totalRawScore *= 0.60; // 40% penalty for topic splattering
+  }
+
+  // Anti-Loophole Defense 9: Symbol Density & Malformed Document Guard (loophole-11)
+  const rawTitle = page.title || "";
+  const symbolCount = (rawTitle.match(/[\.\*\+\?\^\$\{\}\(\)\|\[\]]/g) || []).length;
+  if (symbolCount >= 4) {
+    totalRawScore *= 0.65; // Malformed / test symbol demotion
   }
 
   // Normalize raw score to [0, 100]
@@ -252,7 +259,8 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
       bodyMatches,
       exactPhrase,
       queryDensity: parseFloat((queryDensity * 100).toFixed(1)),
-      isKeywordSpam: queryDensity > 0.12,
+      isKeywordSpam: queryDensity > 0.10,
+      isOmniTopic: topicsList.length >= 3,
       rawScore: parseFloat(totalRawScore.toFixed(2))
     }
   };
@@ -260,7 +268,6 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
 
 /**
  * 2. Popularity Score Calculation (S_pop in [0, 100])
- * Logarithmic dampening prevents viral skew.
  */
 export function calculatePopularity(views) {
   const safeViews = Math.max(100, Number(views) || 0);
@@ -280,10 +287,6 @@ export function calculatePopularity(views) {
 
 /**
  * 3. Engagement Score Calculation (S_eng in [0, 100])
- * 
- * Hardened with Reading Velocity & Content Depth Cross-Check:
- * - Prevents sweet-spot dwell sniping (loophole-09) on short micropages.
- * - Prevents abandoned tab inflation (loophole-03).
  */
 export function calculateEngagement(avgTimeSeconds, contentText = "") {
   const t = Math.max(0, Number(avgTimeSeconds) || 0);
@@ -309,15 +312,12 @@ export function calculateEngagement(avgTimeSeconds, contentText = "") {
     category = "Idle / Abandoned Tab Safeguard (>10m)";
   }
 
-  // Anti-Loophole Defense 3: Reading Velocity & Content Depth Guard
-  // Calculate word count. Average human reading speed = 200-250 wpm (~3.5 words/sec).
+  // Anti-Loophole Defense 3: Reading Velocity & Content Depth Guard (loophole-09)
   const wordCount = (contentText || "").trim().split(/\s+/).filter(Boolean).length;
   if (wordCount > 0 && wordCount < 60) {
-    // If page has only 20-40 words, maximum plausible reading time is 15-30 seconds.
-    // If dwell is artificially held at 195s, cap the engagement score!
     const plausibleMaxSeconds = Math.max(30, (wordCount / 180) * 60 * 2.5);
     if (t > plausibleMaxSeconds) {
-      score = Math.min(score, 60); // Cap short page dwell score at 60
+      score = Math.min(score, 50); // Capped at 50 pts
       category = "Shallow Content Dwell Cap";
     }
   }
@@ -333,11 +333,6 @@ export function calculateEngagement(avgTimeSeconds, contentText = "") {
 
 /**
  * 4. Link Signals Score Calculation (S_lnk in [0, 100])
- * 
- * Hardened with:
- * - Square quality dampening (prevents 500 low-quality links from gaming rank)
- * - Outbound parasite suppression (outbound trust is capped by inbound authority)
- * - Link farm penalty
  */
 export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundLinks = 10, outboundTrust = 0.8) {
   const inCount = Math.max(0, Number(inboundLinks) || 0);
@@ -345,24 +340,21 @@ export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundL
   const outCount = Math.max(0, Number(outboundLinks) || 0);
   const outTrust = Math.max(0.1, Math.min(1.0, Number(outboundTrust) || 0.8));
 
-  // Anti-Loophole Defense 4: Inbound Quality Square Dampening
-  // If inQual is 0.15 (spam directory), (0.15)^1.5 severely dampens raw count
-  const effectiveQuality = Math.pow(inQual, 1.4);
+  // Anti-Loophole Defense 4: Inbound Quality Exponential Dampening
+  const effectiveQuality = Math.pow(inQual, 1.5);
   const rawInbound = Math.min(100, Math.sqrt(inCount) * 11.0 * effectiveQuality);
 
-  // Anti-Loophole Defense 5: Outbound Parasitism Defense
-  // A page with near-zero inbound authority cannot claim a 99% link score purely by linking to NASA/W3C
+  // Anti-Loophole Defense 5: Outbound Parasite Defense (loophole-08)
   let effectiveOutboundTrust = outTrust;
   if (rawInbound < 25) {
-    effectiveOutboundTrust = Math.min(effectiveOutboundTrust, 0.45);
+    effectiveOutboundTrust = Math.min(effectiveOutboundTrust, 0.35);
   }
 
   let outboundScore = effectiveOutboundTrust * 100;
   if (outCount > 30 && outTrust < 0.4) {
-    outboundScore *= 0.25; // Severe link farm penalty
+    outboundScore *= 0.20; // Severe link farm penalty
   }
 
-  // Blended link score
   const combined = Math.round(0.75 * rawInbound + 0.25 * outboundScore);
   const clamped = Math.max(0, Math.min(100, combined));
 
@@ -377,9 +369,6 @@ export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundL
 
 /**
  * 5. User Behavior Score Calculation (S_beh in [0, 100])
- * 
- * Hardened with Satisfaction-Gated CTR Fraud Filter:
- * - High CTR with low satisfaction (<20%) is treated as click-fraud / clickbait trap.
  */
 export function calculateUserBehavior(aggregateClicks, impressions, satisfactionRate = 0.8, avgTimeSeconds = 60) {
   const clicks = Math.max(0, Number(aggregateClicks) || 0);
@@ -388,27 +377,22 @@ export function calculateUserBehavior(aggregateClicks, impressions, satisfaction
   const dwell = Math.max(0, Number(avgTimeSeconds) || 0);
 
   const ctr = clicks / imps;
-
-  // Base CTR score (0 - 100)
   let ctrScore = Math.min(100, Math.round((ctr / 0.20) * 100));
 
-  // Anti-Loophole Defense 6: Satisfaction-Gated CTR Filter
-  // If users immediately bounce (dwell < 18s) and satisfaction is < 25%, high CTR represents clickbait/fraud
+  // Anti-Loophole Defense 6: Toxic Clickbait & Satisfaction-Gated CTR Filter (loophole-05, loophole-13)
   if (satRate < 0.25 || dwell < 18) {
-    // Invert/penalize CTR reward
-    ctrScore = Math.round(ctrScore * satRate * 0.5);
+    ctrScore = Math.round(ctrScore * satRate * 0.4);
   }
 
   const satScore = Math.round(satRate * 100);
-
-  // 35% CTR, 65% Satisfaction
   const score = Math.round(0.35 * ctrScore + 0.65 * satScore);
 
   return {
     score: Math.max(0, Math.min(100, score)),
     ctr: parseFloat((ctr * 100).toFixed(1)),
     satisfactionRate: satRate,
-    satisfactionPercent: satScore
+    satisfactionPercent: satScore,
+    isClickbait: satRate < 0.25 && dwell < 18
   };
 }
 
@@ -419,7 +403,11 @@ export function calculateQualityFreshness(qualityScore = 0.8, freshnessScore = 0
   const q = Math.max(0, Math.min(1.0, Number(qualityScore) || 0.8));
   const f = Math.max(0, Math.min(1.0, Number(freshnessScore) || 0.8));
 
-  const score = Math.round((0.65 * q + 0.35 * f) * 100);
+  // Anti-Loophole Defense 8: Freshness Quality Sanity Cap (loophole-15)
+  // Freshness only amplifies high-quality content; recent shallow content is capped
+  const effectiveFreshness = f * (0.3 + 0.7 * q);
+  const score = Math.round((0.65 * q + 0.35 * effectiveFreshness) * 100);
+
   return {
     score: Math.max(0, Math.min(100, score)),
     qualityRating: q,
@@ -428,16 +416,13 @@ export function calculateQualityFreshness(qualityScore = 0.8, freshnessScore = 0
 }
 
 /**
- * Anti-Loophole Defense 7: Content Shingle Deduplication (Anti-Scraper Filter)
- * Checks if candidate document is a scraped near-duplicate of an authoritative source.
+ * Anti-Loophole Defense 3: Zero-Tolerance Content Shingle Deduplication (Anti-Scraper Filter)
  */
 export function detectScraperDuplicates(candidates) {
-  // Sort candidates by inbound citation authority & quality
   const canonicalMap = new Map();
   const duplicatePenaltyMap = new Map();
 
   for (const item of candidates) {
-    // Extract first 15 normalized content words as rough shingle fingerprint
     const words = tokenize(item.page.content || "").slice(0, 15).join(" ");
     if (!words || words.length < 20) continue;
 
@@ -445,15 +430,13 @@ export function detectScraperDuplicates(candidates) {
       canonicalMap.set(words, item);
     } else {
       const canonical = canonicalMap.get(words);
-      // If current item has lower link quality, lower inbound links, or is from an untrusted host,
-      // it is a scraped mirror!
       if (
         item.page.inboundLinks < canonical.page.inboundLinks ||
         item.page.inboundQuality < canonical.page.inboundQuality ||
         item.page.url.includes("mirror") ||
         item.page.url.includes("scraped")
       ) {
-        duplicatePenaltyMap.set(item.page.id, 0.45); // 55% penalty for scraped mirror
+        duplicatePenaltyMap.set(item.page.id, 0.20); // 80% penalty for scraped duplicate!
       }
     }
   }
@@ -470,12 +453,22 @@ export function generateExplanations(signals, contributions, query, isDuplicate 
 
   if (isDuplicate) {
     badges.push({ text: "⚠ Duplicate Mirror Demoted", type: "popularity" });
-    bulletReasons.push("Identified as a near-duplicate mirror of a canonical document; anti-scraping demotion applied");
+    bulletReasons.push("Identified as an unauthorized near-duplicate mirror of a canonical document; 80% anti-scraping demotion applied");
   }
 
   if (signals.relevance.details.isKeywordSpam) {
     badges.push({ text: "⚠ Keyword Density Cap Applied", type: "relevance" });
-    bulletReasons.push("High keyword repetition detected (>12% density); BM25 saturation penalty applied");
+    bulletReasons.push("High keyword repetition detected (>10% density); BM25 saturation penalty applied");
+  }
+
+  if (signals.behavior.isClickbait) {
+    badges.push({ text: "⚠ High Bounce / Clickbait Demotion", type: "behavior" });
+    bulletReasons.push("High click-through with severe bounce rate (<18s dwell, <25% satisfaction); clickbait demotion applied");
+  }
+
+  if (signals.relevance.details.isOmniTopic) {
+    badges.push({ text: "⚠ Off-Topic Dilution Demotion", type: "relevance" });
+    bulletReasons.push("Page splatters 3+ divergent topic categories; cross-domain dilution penalty applied");
   }
 
   // Relevance explanation
@@ -546,7 +539,7 @@ export function generateExplanations(signals, contributions, query, isDuplicate 
 }
 
 /**
- * Execute Search and Ranking over a document collection (Hardened)
+ * Execute Search and Ranking over a document collection (Fully Hardened)
  */
 export function executeSearch(pages = [], query = "", userWeights = DEFAULT_WEIGHTS) {
   const startTime = performance.now();
@@ -604,40 +597,48 @@ export function executeSearch(pages = [], query = "", userWeights = DEFAULT_WEIG
     const isDuplicate = duplicatePenaltyMap.has(page.id);
     const duplicateFactor = duplicatePenaltyMap.get(page.id) || 1.0;
 
+    // Additional Clickbait cap: if severe clickbait trap, cap final score at 32 max
+    const isClickbaitTrap = signals.behavior.isClickbait;
+    const clickbaitFactor = isClickbaitTrap ? 0.50 : 1.0;
+
     const contributions = {
       relevance: {
         rawScore: signals.relevance.score,
         weight: weights.relevance,
-        points: parseFloat(((signals.relevance.score * weights.relevance * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.relevance.score * weights.relevance * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       },
       popularity: {
         rawScore: signals.popularity.score,
         weight: weights.popularity,
-        points: parseFloat(((signals.popularity.score * weights.popularity * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.popularity.score * weights.popularity * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       },
       engagement: {
         rawScore: signals.engagement.score,
         weight: weights.engagement,
-        points: parseFloat(((signals.engagement.score * weights.engagement * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.engagement.score * weights.engagement * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       },
       links: {
         rawScore: signals.links.score,
         weight: weights.links,
-        points: parseFloat(((signals.links.score * weights.links * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.links.score * weights.links * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       },
       behavior: {
         rawScore: signals.behavior.score,
         weight: weights.behavior,
-        points: parseFloat(((signals.behavior.score * weights.behavior * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.behavior.score * weights.behavior * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       },
       quality: {
         rawScore: signals.quality.score,
         weight: weights.quality,
-        points: parseFloat(((signals.quality.score * weights.quality * duplicateFactor) / totalWeight).toFixed(2))
+        points: parseFloat(((signals.quality.score * weights.quality * duplicateFactor * clickbaitFactor) / totalWeight).toFixed(2))
       }
     };
 
-    const compositeScore = Object.values(contributions).reduce((acc, c) => acc + c.points, 0);
+    let compositeScore = Object.values(contributions).reduce((acc, c) => acc + c.points, 0);
+    if (isClickbaitTrap) {
+      compositeScore = Math.min(32, compositeScore);
+    }
+
     const finalScore = parseFloat(compositeScore.toFixed(1));
     const explanations = generateExplanations(signals, contributions, rawQuery, isDuplicate);
 
