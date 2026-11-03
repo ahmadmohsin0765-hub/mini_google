@@ -100,14 +100,39 @@ const STOPWORDS = new Set([
   "was", "what", "when", "where", "who", "will", "with"
 ]);
 
+const DOMAIN_CLUSTERS = [
+  { name: "computing", keywords: ["operating", "linux", "unix", "computing", "hardware", "software", "source", "bsd", "retro", "programming"] },
+  { name: "space", keywords: ["space", "astronomy", "telescope", "physics", "cobe", "cosmic"] },
+  { name: "coffee", keywords: ["coffee", "brewing", "espresso", "roasting"] },
+  { name: "crypto", keywords: ["cryptography", "privacy", "security", "rsa", "encryption"] },
+  { name: "web", keywords: ["web", "internet", "standards", "w3c", "html", "browser"] }
+];
+
+function isDivergentTopicSplattering(topics) {
+  if (!topics || topics.length < 3) return false;
+  const matched = new Set();
+  const lower = topics.map(t => t.toLowerCase()).join(" ");
+  for (const cluster of DOMAIN_CLUSTERS) {
+    if (cluster.keywords.some(k => lower.includes(k))) {
+      matched.add(cluster.name);
+    }
+  }
+  return matched.size >= 3;
+}
+
+// Whitelisted single-character technical terms
+const TECHNICAL_SINGLE_CHARS = new Set(["c", "r"]);
+
 export function tokenize(text) {
   if (!text || typeof text !== "string") return [];
   return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Strip diacritics: café -> cafe
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
     .map(t => t.trim())
-    .filter(t => t.length > 1 && !STOPWORDS.has(t));
+    .filter(t => (t.length > 1 || TECHNICAL_SINGLE_CHARS.has(t)) && !STOPWORDS.has(t));
 }
 
 function stemToken(token) {
@@ -129,8 +154,12 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   const lowerTitle = (page.title || "").toLowerCase();
   const lowerDesc = (page.description || "").toLowerCase();
   const lowerContent = (page.content || "").toLowerCase();
-  const lowerKeywords = (page.keywords || []).map(k => k.toLowerCase()).join(" ");
-  const lowerTopics = (page.topics || []).map(t => t.toLowerCase()).join(" ");
+
+  // Extract tokenized sets for exact matching (prevents substring collision like "cat" in "concatenation")
+  const keywordTokens = new Set(
+    (page.keywords || []).flatMap(k => tokenize(k)).concat((page.topics || []).flatMap(t => tokenize(t)))
+  );
+  const keywordStems = new Set([...keywordTokens].map(stemToken));
 
   const allWords = (lowerTitle + " " + lowerDesc + " " + lowerContent).split(/\s+/).filter(Boolean);
   const totalWords = Math.max(1, allWords.length);
@@ -139,6 +168,7 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   let matchedUniqueTokens = 0;
   let titleMatches = 0;
   let bodyMatches = 0;
+  let descMatches = 0;
   let totalQueryOccurrences = 0;
 
   // Deduplicate query tokens using stemmed forms
@@ -168,17 +198,12 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
       tokenMatched = true;
     }
 
-    // Keywords and topics (curated human metadata)
-    if (lowerKeywords.includes(token) || lowerTopics.includes(token) || lowerKeywords.includes(stem)) {
-      totalRawScore += 2.2;
-      tokenMatched = true;
-    }
-
     // Description match
     const descRegex = new RegExp(`\\b${escapeRegExp(token)}s?\\b`, "gi");
     const descCount = (lowerDesc.match(descRegex) || []).length;
     if (descCount > 0) {
       totalRawScore += Math.min(2, descCount) * 1.4;
+      descMatches += descCount;
       totalQueryOccurrences += descCount;
       tokenMatched = true;
     }
@@ -192,6 +217,15 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
       bodyMatches += rawContentCount;
       totalQueryOccurrences += rawContentCount;
       tokenMatched = true;
+    }
+
+    // Keywords and topics: exact token/stem match only (not substring)
+    // Only contributes when backed by textual evidence in title, description, or content
+    if (keywordTokens.has(token) || keywordStems.has(stem)) {
+      if (titleMatches > 0 || bodyMatches > 0 || descMatches > 0) {
+        totalRawScore += 1.8;
+        tokenMatched = true;
+      }
     }
 
     if (tokenMatched) {
@@ -227,16 +261,22 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
     totalRawScore *= spamPenalty;
   }
 
-  // Anti-Loophole Defense 2: Title-Content Coherence Guard (loophole-06)
-  if (titleMatches > 0 && bodyMatches === 0 && totalWords > 30) {
-    totalRawScore *= 0.50;
+  // Anti-Loophole Defense: Meta-Keyword Array Over-Stuffing Guard
+  const rawKeywords = page.keywords || [];
+  if (rawKeywords.length > 12) {
+    totalRawScore *= Math.max(0.25, 12 / rawKeywords.length);
+  }
+
+  // Anti-Loophole Defense 2: Title-Content Coherence Guard (loophole-06 & deceptive title baiting)
+  if (titleMatches > 0 && bodyMatches === 0 && totalWords > 40) {
+    totalRawScore *= 0.20; // 80% penalty if title promises topic but 40+ word body contains 0 matches
   }
 
   // Anti-Loophole Defense 7: Topical Cohesion & Document Entropy Filter (loophole-07)
-  const topicsList = page.topics || [];
-  if (topicsList.length >= 3) {
+  const isOmniTopic = isDivergentTopicSplattering(page.topics);
+  if (isOmniTopic) {
     // Page splatters multiple divergent categories (e.g. OS + Space + Coffee + Crypto)
-    totalRawScore *= 0.25; // 75% penalty for topic splattering
+    totalRawScore *= 0.20; // 80% penalty for topic splattering
   }
 
   // Anti-Loophole Defense 8: Universal Editorial Quality Baseline Gatekeeper
@@ -258,7 +298,7 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
   const isAcronymList = lowerTitle.includes("acronym") || lowerTitle.includes("glossary");
   const isShallowStub = totalWords <= 60 && (lowerTitle.includes("bulletin") || lowerTitle.includes("directory") || lowerTitle.includes("stream") || lowerTitle.includes("log") || lowerTitle.includes("monitor") || isAcronymList || totalWords < 40);
   if (isShallowStub || isAcronymList) {
-    totalRawScore *= 0.30;
+    totalRawScore *= 0.15; // 85% demotion for thin stubs/automated log streams
   }
 
   // Normalize raw score to [0, 100]
@@ -275,7 +315,7 @@ export function calculateRelevance(page, queryTokens, rawQuery = "") {
       exactPhrase,
       queryDensity: parseFloat((queryDensity * 100).toFixed(1)),
       isKeywordSpam: queryDensity > 0.10,
-      isOmniTopic: topicsList.length >= 3,
+      isOmniTopic,
       rawScore: parseFloat(totalRawScore.toFixed(2))
     }
   };
@@ -349,15 +389,24 @@ export function calculateEngagement(avgTimeSeconds, contentText = "") {
 /**
  * 4. Link Signals Score Calculation (S_lnk in [0, 100])
  */
-export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundLinks = 10, outboundTrust = 0.8) {
+export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundLinks = 10, outboundTrust = 0.8, pageViews = 1000) {
   const inCount = Math.max(0, Number(inboundLinks) || 0);
   const inQual = Math.max(0.1, Math.min(1.0, Number(inboundQuality) || 0.8));
   const outCount = Math.max(0, Number(outboundLinks) || 0);
   const outTrust = Math.max(0.1, Math.min(1.0, Number(outboundTrust) || 0.8));
+  const views = Math.max(1, Number(pageViews) || 1000);
 
   // Anti-Loophole Defense 4: Inbound Quality Exponential Dampening
   const effectiveQuality = Math.pow(inQual, 1.5);
-  const rawInbound = Math.min(100, Math.sqrt(inCount) * 11.0 * effectiveQuality);
+  let rawInbound = Math.min(100, Math.sqrt(inCount) * 11.0 * effectiveQuality);
+
+  // Anti-Loophole Defense: Sybil Link Blast without Human Readership Guard
+  // If inbound links vastly exceed human page views (e.g. 500+ links on a page with <100 views),
+  // it is an artificial automated link blast.
+  if (inCount > 100 && inCount > views * 2) {
+    const sybilDampening = Math.max(0.15, Math.min(1.0, (views * 2) / inCount));
+    rawInbound *= sybilDampening;
+  }
 
   // Anti-Loophole Defense 5: Outbound Parasite Defense (loophole-08)
   let effectiveOutboundTrust = outTrust;
@@ -386,12 +435,31 @@ export function calculateLinkScore(inboundLinks, inboundQuality = 0.8, outboundL
  * 5. User Behavior Score Calculation (S_beh in [0, 100])
  */
 export function calculateUserBehavior(aggregateClicks, impressions, satisfactionRate = 0.8, avgTimeSeconds = 60) {
-  const clicks = Math.max(0, Number(aggregateClicks) || 0);
-  const imps = Math.max(1, Number(impressions) || 1);
+  const rawClicks = Math.max(0, Number(aggregateClicks) || 0);
+  const rawImps = Math.max(0, Number(impressions) || 0);
   const satRate = Math.max(0, Math.min(1.0, Number(satisfactionRate) || 0.8));
   const dwell = Math.max(0, Number(avgTimeSeconds) || 0);
 
+  // Safeguard against ghost unverified data:
+  // If 0 impressions or 0 clicks, no user behavior data exists (score = 0)
+  if (rawImps === 0 || rawClicks === 0) {
+    return {
+      score: 0,
+      ctr: 0,
+      satisfactionRate: 0,
+      satisfactionPercent: 0,
+      isClickbait: false,
+      isGhost: true
+    };
+  }
+
+  // Cap clicks at impressions: CTR cannot exceed 100% physically
+  const isTelemetryTampered = rawClicks > rawImps;
+  const clicks = Math.min(rawClicks, rawImps);
+  const imps = Math.max(1, rawImps);
   const ctr = clicks / imps;
+
+  // Bot Fraud Detection: Natural search engine CTR rarely exceeds 50%
   let ctrScore = Math.min(100, Math.round((ctr / 0.20) * 100));
 
   // Anti-Loophole Defense 6: Toxic Clickbait & Satisfaction-Gated CTR Filter (loophole-05, loophole-13)
@@ -399,15 +467,25 @@ export function calculateUserBehavior(aggregateClicks, impressions, satisfaction
     ctrScore = Math.round(ctrScore * satRate * 0.4);
   }
 
-  const satScore = Math.round(satRate * 100);
-  const score = Math.round(0.35 * ctrScore + 0.65 * satScore);
+  // Sample size confidence scaling: requires at least 30 impressions for full weight
+  const confidence = Math.min(1.0, imps / 30);
+  let satScore = Math.round(satRate * 100 * confidence);
+
+  // Anti-Loophole Defense: Telemetry Tampering & Impossible CTR Demotion
+  if (isTelemetryTampered || ctr > 0.50) {
+    ctrScore = Math.round(ctrScore * 0.15);
+    satScore = Math.round(satScore * (isTelemetryTampered ? 0.20 : 0.40));
+  }
+
+  const score = Math.round((0.35 * ctrScore + 0.65 * satScore) * confidence);
 
   return {
-    score: Math.max(0, Math.min(100, score)),
+    score: Math.max(0, Math.min(isTelemetryTampered || ctr > 0.50 ? 25 : 100, score)),
     ctr: parseFloat((ctr * 100).toFixed(1)),
     satisfactionRate: satRate,
-    satisfactionPercent: satScore,
-    isClickbait: satRate < 0.25 && dwell < 18
+    satisfactionPercent: Math.round(satRate * 100),
+    isClickbait: satRate < 0.25 && dwell < 18,
+    isClickFraud: isTelemetryTampered || ctr > 0.50
   };
 }
 
@@ -592,7 +670,7 @@ export function executeSearch(pages = [], query = "", userWeights = DEFAULT_WEIG
 
     const pop = calculatePopularity(page.views);
     const eng = calculateEngagement(page.avgTimeOnPage, page.content);
-    const lnk = calculateLinkScore(page.inboundLinks, page.inboundQuality, page.outboundLinks, page.outboundTrust);
+    const lnk = calculateLinkScore(page.inboundLinks, page.inboundQuality, page.outboundLinks, page.outboundTrust, page.views);
     const beh = calculateUserBehavior(page.aggregateClicks, page.impressions, page.satisfactionRate, page.avgTimeOnPage);
     const qlt = calculateQualityFreshness(page.qualityScore, page.freshnessScore);
 

@@ -18,23 +18,31 @@ export function escapeHtml(str) {
 }
 
 /**
- * Highlight matched query terms inside snippet text
+ * Highlight matched query terms inside snippet text safely without corrupting HTML entities
  */
 export function highlightTerms(text, tokens = []) {
   if (!text) return "";
-  const escaped = escapeHtml(text);
-  if (!tokens || tokens.length === 0) return escaped;
+  if (!tokens || tokens.length === 0) return escapeHtml(text);
 
-  // Filter valid alphanumeric tokens
+  // Filter valid alphanumeric tokens (including whitelisted single-character terms)
   const cleanTokens = tokens
     .map(t => t.trim())
-    .filter(t => t.length > 1)
+    .filter(t => t.length > 1 || t === "c" || t === "r")
     .map(escapeRegExp);
 
-  if (cleanTokens.length === 0) return escaped;
+  if (cleanTokens.length === 0) return escapeHtml(text);
 
-  const regex = new RegExp(`\\b(${cleanTokens.join("|")})`, "gi");
-  return escaped.replace(regex, '<mark class="highlight-match">$1</mark>');
+  // Split on word matches in unescaped text, then escape individual chunks to avoid entity corruption
+  const regex = new RegExp(`(\\b(?:${cleanTokens.join("|")})\\b)`, "gi");
+  const parts = String(text).split(regex);
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) {
+        return `<mark class="highlight-match">${escapeHtml(part)}</mark>`;
+      }
+      return escapeHtml(part);
+    })
+    .join("");
 }
 
 function escapeRegExp(string) {
