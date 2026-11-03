@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARCHON '98 — Universal Web Search & Citation Index</title>
+  <meta name="description" content="A 1998-inspired fast search engine prototype featuring multi-signal ranking, dwell-time safeguards, citation topology, and configurable algorithmic weights.">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Accessibility Skip Link -->
+  <a href="#main-content" class="skip-link">Skip to main search content</a>
+
+  <!-- Global Header -->
+  <header class="site-header" role="banner">
+    <div class="container header-inner">
+      <a href="#" id="brand-link" class="brand-badge" aria-label="ARCHON '98 Home">
+        <span class="logo-text">ARCHON</span>
+        <span class="logo-sub">'98</span>
+      </a>
+      <nav class="header-nav" aria-label="Site Navigation">
+        <button type="button" class="retro-button secondary" id="nav-how-ranking-works-btn">
+          How Ranking Works
+        </button>
+        <button type="button" class="retro-button secondary" id="nav-tune-signals-btn">
+          Ranking Settings
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" role="main">
+    <!-- HOME HERO VIEW (Centered 1998 classic entry point) -->
+    <section class="home-hero" id="home-view" aria-label="Search Engine Home">
+      <h1 class="hero-logo-large">ARCHON</h1>
+      <p class="hero-tagline">The High-Speed Gateway to the World Wide Web & Citation Index (Est. 1998)</p>
+
+      <form class="hero-search-form" id="home-search-form" role="search" action="#" method="GET">
+        <div class="search-input-wrapper">
+          <label for="home-search-input" class="visually-hidden" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;">
+            Search Query
+          </label>
+          <input
+            type="search"
+            id="home-search-input"
+            name="q"
+            class="search-input"
+            placeholder="Search documents, web pages, and academic citations..."
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            required
+            autofocus
+          >
+        </div>
+        <div class="hero-buttons">
+          <button type="submit" class="retro-button primary" id="home-submit-btn">
+            Archon Search
+          </button>
+          <button type="button" class="retro-button" id="home-curious-btn">
+            I'm Feeling Curious
+          </button>
+        </div>
+      </form>
+
+      <!-- Sample Searches -->
+      <div class="sample-searches-box">
+        <span>Try sample searches across the 1998 index:</span>
+        <ul class="sample-queries-list" role="list">
+          <li><button type="button" class="sample-query-pill" data-query="open source operating systems">open source operating systems</button></li>
+          <li><button type="button" class="sample-query-pill" data-query="retro computing history">retro computing history</button></li>
+          <li><button type="button" class="sample-query-pill" data-query="space telescope discoveries">space telescope discoveries</button></li>
+          <li><button type="button" class="sample-query-pill" data-query="coffee brewing techniques">coffee brewing techniques</button></li>
+          <li><button type="button" class="sample-query-pill" data-query="digital privacy cryptography">digital privacy cryptography</button></li>
+          <li><button type="button" class="sample-query-pill" data-query="web crawler search engine">web crawler search engine</button></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- RESULTS VIEW (Search bar at top, stats bar, results list & tuner panel) -->
+    <section class="results-view hidden" id="results-view" aria-label="Search Results">
+      <div class="results-top-bar">
+        <div class="container">
+          <form class="results-search-row" id="results-search-form" role="search" action="#" method="GET">
+            <label for="results-search-input" class="visually-hidden" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;">
+              Search Query
+            </label>
+            <input
+              type="search"
+              id="results-search-input"
+              name="q"
+              class="search-input results-search-input"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              required
+            >
+            <button type="submit" class="retro-button primary">Search</button>
+            <button type="button" class="retro-button" id="results-curious-btn">Surprise Me</button>
+          </form>
+
+          <div class="stats-and-controls-bar">
+            <div id="results-stats-output" class="result-stats-text" aria-live="polite">
+              <!-- Dynamically populated stats -->
+            </div>
+            <div class="controls-button-group">
+              <button type="button" class="retro-button secondary" id="toggle-tuner-btn" aria-expanded="true" aria-controls="tuner-panel">
+                ⚙ Tune Ranking Signals
+              </button>
+              <button type="button" class="retro-button secondary" id="results-how-btn">
+                ℹ How Ranking Works
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Results Container -->
+      <div class="container">
+        <div class="results-grid has-panel" id="results-grid-container">
+          <!-- Left Column: Search Results List or Empty/No-Results States -->
+          <div class="results-main-col">
+            <ol class="results-list" id="results-list" aria-label="Search Results List">
+              <!-- Result cards injected dynamically -->
+            </ol>
+
+            <!-- No Results State -->
+            <div class="state-box hidden" id="no-results-state">
+              <h2 class="state-title">No Matching Documents Found</h2>
+              <p class="state-text" id="no-results-query-msg">Your query did not match any documents in our sample index.</p>
+              <div class="tips-list">
+                <p><strong>Suggestions:</strong></p>
+                <ul>
+                  <li>Ensure all keywords are spelled correctly.</li>
+                  <li>Try different or broader search terms.</li>
+                  <li>Click one of our sample queries below to test the engine.</li>
+                </ul>
+              </div>
+              <ul class="sample-queries-list" role="list">
+                <li><button type="button" class="sample-query-pill" data-query="operating systems">operating systems</button></li>
+                <li><button type="button" class="sample-query-pill" data-query="astronomy">astronomy</button></li>
+                <li><button type="button" class="sample-query-pill" data-query="cryptography">cryptography</button></li>
+                <li><button type="button" class="sample-query-pill" data-query="web history">web history</button></li>
+              </ul>
+            </div>
+
+            <!-- Empty Query State -->
+            <div class="state-box hidden" id="empty-query-state">
+              <h2 class="state-title">Search Terms Required</h2>
+              <p class="state-text">Please enter one or more keywords into the search box to query the ARCHON index.</p>
+              <button type="button" class="retro-button primary" id="empty-state-return-btn">Return to Home</button>
+            </div>
+          </div>
+
+          <!-- Right Column: Interactive Settings / Tuner Panel -->
+          <aside class="tuner-panel" id="tuner-panel" aria-label="Ranking Signal Weights Tuner">
+            <div class="panel-header">
+              <h2 class="panel-title">Ranking Algorithm Tuner</h2>
+              <button type="button" class="retro-button secondary" id="close-tuner-btn" aria-label="Close Settings Panel">✕</button>
+            </div>
+            <p class="panel-sub">
+              Adjust the 6 signal weights below to see results reorder in real time. Demonstrates multi-signal ranking vs. naive keyword matches.
+            </p>
+
+            <!-- Presets Dropdown -->
+            <div class="preset-selector-group">
+              <label for="ranking-preset-select" class="preset-label">Demonstration Presets:</label>
+              <select id="ranking-preset-select" class="preset-select">
+                <option value="balanced">Balanced Standard (Default)</option>
+                <option value="webGraph">1998 Web Graph (Citation / PageRank)</option>
+                <option value="keywordPure">Pure Keyword Match (AltaVista 1995)</option>
+                <option value="crowdWisdom">Crowd Wisdom (Popularity & CTR)</option>
+                <option value="deepReading">Deep Reading (High Engagement)</option>
+                <option value="qualityFresh">Quality & Freshness Focus</option>
+              </select>
+              <div id="preset-description-text" class="preset-desc">
+                Multi-signal synthesis balancing textual relevance, link graph authority, and reader satisfaction.
+              </div>
+            </div>
+
+            <!-- Fieldset for Accessible Sliders -->
+            <fieldset class="signals-sliders-list" style="border: none; padding: 0; margin: 0;">
+              <legend class="visually-hidden" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;">Signal Weight Configuration</legend>
+
+              <!-- Signal 1: Query Relevance -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-relevance" class="slider-label">Query Relevance</label>
+                  <span class="slider-value-pill" id="val-relevance">40%</span>
+                </div>
+                <input type="range" id="weight-relevance" class="slider-range" min="0" max="100" step="5" value="40">
+                <span class="slider-hint">Title, keyword, and content token match density</span>
+              </div>
+
+              <!-- Signal 2: Popularity (Views) -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-popularity" class="slider-label">Popularity (Views)</label>
+                  <span class="slider-value-pill" id="val-popularity">15%</span>
+                </div>
+                <input type="range" id="weight-popularity" class="slider-range" min="0" max="100" step="5" value="15">
+                <span class="slider-hint">Log-scaled views (dampens viral outliers)</span>
+              </div>
+
+              <!-- Signal 3: Engagement (Dwell Time) -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-engagement" class="slider-label">Reader Engagement</label>
+                  <span class="slider-value-pill" id="val-engagement">15%</span>
+                </div>
+                <input type="range" id="weight-engagement" class="slider-range" min="0" max="100" step="5" value="15">
+                <span class="slider-hint">Optimal 75-300s dwell; idle tab safeguard applied</span>
+              </div>
+
+              <!-- Signal 4: Link Signals -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-links" class="slider-label">Link Citation Graph</label>
+                  <span class="slider-value-pill" id="val-links">15%</span>
+                </div>
+                <input type="range" id="weight-links" class="slider-range" min="0" max="100" step="5" value="15">
+                <span class="slider-hint">Inbound citations count & outbound domain trust</span>
+              </div>
+
+              <!-- Signal 5: User Behavior -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-behavior" class="slider-label">User Behavior Signals</label>
+                  <span class="slider-value-pill" id="val-behavior">10%</span>
+                </div>
+                <input type="range" id="weight-behavior" class="slider-range" min="0" max="100" step="5" value="10">
+                <span class="slider-hint">Aggregate click CTR & post-click satisfaction</span>
+              </div>
+
+              <!-- Signal 6: Quality & Freshness -->
+              <div class="slider-group">
+                <div class="slider-header">
+                  <label for="weight-quality" class="slider-label">Quality & Freshness</label>
+                  <span class="slider-value-pill" id="val-quality">5%</span>
+                </div>
+                <input type="range" id="weight-quality" class="slider-range" min="0" max="100" step="5" value="5">
+                <span class="slider-hint">Editorial integrity standard and recent updates</span>
+              </div>
+            </fieldset>
+
+            <div class="panel-actions">
+              <button type="button" class="retro-button secondary" id="reset-weights-btn">
+                Reset to Default Weights
+              </button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Educational Dialog: How Ranking Works -->
+  <dialog class="modal-dialog" id="how-ranking-dialog" aria-labelledby="dialog-title">
+    <div class="modal-header">
+      <h3 class="modal-title" id="dialog-title">How ARCHON Ranks Web Documents</h3>
+      <button type="button" class="modal-close-btn" id="close-dialog-btn" aria-label="Close Dialog">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>
+        In the early World Wide Web (1995-1998), first-generation search engines evaluated pages solely by counting how many times a keyword appeared. This made them vulnerable to keyword stuffing and spam.
+      </p>
+      <p>
+        <strong>ARCHON '98</strong> combines 6 distinct signals into a composite score (0 to 100), simulating the revolutionary multi-signal algorithms that transformed web search in 1998.
+      </p>
+
+      <div class="signal-explainer-card">
+        <h4>1. Query Relevance (Title, Content & Topics)</h4>
+        <p>Evaluates token presence across page fields. Titles receive a 4x multiplier, human-curated topics receive 2.5x, and descriptions receive 1.8x. Verbatim exact phrases receive a 25% bonus, while pages missing query terms face a coverage penalty.</p>
+      </div>
+
+      <div class="signal-explainer-card">
+        <h4>2. Popularity (Log-Scaled View Count)</h4>
+        <p>Measures aggregate readership. Crucially, raw views are scaled using a logarithmic curve: <code>log10(views)</code>. This ensures a viral page with 400,000 views does not completely drown out an authoritative academic paper with 10,000 views.</p>
+        <span class="safeguard-badge">Safeguard: Logarithmic dampening prevents viral skew</span>
+      </div>
+
+      <div class="signal-explainer-card">
+        <h4>3. Reader Engagement (Dwell Time)</h4>
+        <p>Tracks average reading duration. Rather than assuming "longer is always better", ARCHON models human reading behavior: rapid visits under 20 seconds are penalized as bounces, while 75 to 300 seconds represents optimal deep engagement. For extreme times (>10 minutes), an idle tab safeguard gently reduces points to prevent abandoned browser windows from gaming the system.</p>
+        <span class="safeguard-badge">Safeguard: Non-linear plateau prevents idle tab domination</span>
+      </div>
+
+      <div class="signal-explainer-card">
+        <h4>4. Hyperlink Citation Graph (Inbound & Outbound Links)</h4>
+        <p>Inspired by academic citations and early PageRank research. Documents cited by reputable educational and standards institutions (.edu, .org, W3C) gain high citation authority. Pages linking out to link farms are penalized.</p>
+      </div>
+
+      <div class="signal-explainer-card">
+        <h4>5. Aggregate User Behavior (CTR & Satisfaction)</h4>
+        <p>Evaluates collective feedback: click-through rate (CTR) and post-click satisfaction rate (readers who found what they needed without immediately clicking Back). Uses aggregate demo data only; zero personal profiling.</p>
+      </div>
+
+      <div class="signal-explainer-card">
+        <h4>6. Quality & Freshness</h4>
+        <p>Assesses editorial baseline and timestamp recency, favoring clean structure and up-to-date documentation.</p>
+      </div>
+
+      <div style="text-align: right; margin-top: 1rem;">
+        <button type="button" class="retro-button primary" id="dialog-got-it-btn">Back to Searching</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Global Footer -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <nav class="footer-nav" aria-label="Footer Links">
+        <button type="button" id="footer-how-btn">How Ranking Works</button>
+        <a href="#main-content" id="footer-top-btn">Back to Top</a>
+        <button type="button" id="footer-sample-btn" data-query="open source operating systems">Sample Search</button>
+      </nav>
+      <div>
+        <strong>ARCHON SEARCH '98</strong> — 26 Hand-Indexed Documents across Computing, Science & Culture.
+      </div>
+      <div class="privacy-notice">
+        Privacy Guarantee: 100% Client-Side. No user profiles, no telemetry, no tracking cookies, and zero external API calls.
+      </div>
+    </div>
+  </footer>
+
+  <!-- App Script Entry Point -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
+
