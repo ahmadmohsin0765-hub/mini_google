@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, "..");
 
 const PORT = process.env.PORT || 3000;
 
@@ -28,7 +29,7 @@ const server = http.createServer((req, res) => {
   }
 
   const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, "");
-  const filePath = path.join(__dirname, safePath);
+  const filePath = path.join(ROOT_DIR, safePath);
 
   fs.stat(filePath, (err, stats) => {
     if (err || !stats.isFile()) {
@@ -51,6 +52,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`ARCHON '98 Search Server listening at http://localhost:${PORT}`);
+  console.log(`ARCHON '98 Local Dev Server listening at http://localhost:${PORT}`);
 });
-
